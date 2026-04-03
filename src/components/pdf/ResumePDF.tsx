@@ -1,5 +1,5 @@
 import { Document, Page, Text, View, StyleSheet } from '@react-pdf/renderer';
-import { ResumeData } from '@/types/resume';
+import { ResumeData } from '../../types/resume';
 
 const s = StyleSheet.create({
   page: { fontFamily: 'Helvetica', fontSize: 10, lineHeight: 1.5, color: '#1a1f36' },

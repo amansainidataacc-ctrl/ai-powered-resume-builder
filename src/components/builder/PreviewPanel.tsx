@@ -1,5 +1,5 @@
-import { useResume } from '@/context/ResumeContext';
-import { ResumeData } from '@/types/resume';
+import { useResume } from '../../context/ResumeContext';
+import { ResumeData } from '../../types/resume';
 
 const PreviewPanel = () => {
   const { data } = useResume();

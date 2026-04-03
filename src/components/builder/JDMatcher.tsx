@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { useResume } from '@/context/ResumeContext';
-import { analyzeJobMatch } from '@/utils/aiClient';
+import { useResume } from '../../context/ResumeContext';
+import { analyzeJobMatch } from '../../utils/aiClient';
 import { toast } from 'sonner';
 import { Target, Loader2 } from 'lucide-react';
 

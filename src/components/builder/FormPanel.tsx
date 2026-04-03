@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useResume } from '@/context/ResumeContext';
+import { useResume } from '../../context/ResumeContext';
 import { User, Briefcase, GraduationCap, Code, FolderOpen, Award, Target } from 'lucide-react';
 import PersonalSection from './sections/PersonalSection';
 import SummarySection from './sections/SummarySection';

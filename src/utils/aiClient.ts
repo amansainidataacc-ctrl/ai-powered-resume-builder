@@ -1,233 +1,67 @@
-// ============================================================
-// Analytics Career Connect — AI Client
-// 4-model system with dedicated API keys per model
-// ============================================================
-
-const NVIDIA_BASE = 'https://integrate.api.nvidia.com/v1/chat/completions';
-
-// Each model has its own dedicated API key
+const BASE = 'https://integrate.api.nvidia.com/v1/chat/completions'
 const MODELS = {
-  quality: {
-    model: 'meta/llama-3.3-70b-instruct',
-    key: import.meta.env.VITE_NVIDIA_KEY_QUALITY,
-    temperature: 0.7,
-    maxTokens: 1024,
-  },
-  analysis: {
-    model: 'deepseek-ai/deepseek-v3.2',
-    key: import.meta.env.VITE_NVIDIA_KEY_ANALYSIS,
-    temperature: 0.3,
-    maxTokens: 2048,
-  },
-  fast: {
-    model: 'mistralai/mistral-7b-instruct-v0.2',
-    key: import.meta.env.VITE_NVIDIA_KEY_FAST,
-    temperature: 0.5,
-    maxTokens: 512,
-  },
-  fallback: {
-    model: 'meta/llama-3.1-8b-instruct',
-    key: import.meta.env.VITE_NVIDIA_KEY_FALLBACK,
-    temperature: 0.7,
-    maxTokens: 512,
-  },
-};
+  quality: 'meta/llama-4-maverick-17b-128e-instruct',
+  fast: 'mistralai/mistral-large-3-675b-instruct-2512',
+  analysis: 'deepseek-ai/deepseek-v3.2',
+  fallback: 'meta/llama-3.1-8b-instruct',
+}
+const KEYS = {
+  quality: import.meta.env.VITE_NVIDIA_KEY_QUALITY,
+  fast: import.meta.env.VITE_NVIDIA_KEY_FAST,
+  analysis: import.meta.env.VITE_NVIDIA_KEY_ANALYSIS,
+  fallback: import.meta.env.VITE_NVIDIA_KEY_FALLBACK,
+}
+type M = keyof typeof MODELS
+function clean(s: string) { return s.replace(/```json\n?/gi,'').replace(/```\n?/gi,'').trim() }
 
-type ModelType = keyof typeof MODELS;
-
-// Strips markdown code fences from JSON responses
-function cleanJSON(raw: string): string {
-  return raw.replace(/```json\n?/gi, '').replace(/```\n?/gi, '').trim();
+async function call(model: string, key: string, msgs: {role:string,content:string}[], temp=0.7, tokens=1024): Promise<string> {
+  if (!key) throw new Error('API key missing')
+  const r = await fetch(BASE, {
+    method:'POST',
+    headers:{'Content-Type':'application/json','Authorization':`Bearer ${key}`},
+    body: JSON.stringify({ model, messages:msgs, temperature:temp, max_tokens:tokens })
+  })
+  if (!r.ok) throw new Error(`API ${r.status}`)
+  const d = await r.json()
+  const c = d.choices?.[0]?.message?.content?.trim() || ''
+  if (!c) throw new Error('Empty response')
+  return c
 }
 
-// Core fetch wrapper — uses model-specific key
-async function callModel(
-  modelType: ModelType,
-  messages: { role: string; content: string }[],
-): Promise<string> {
-  const cfg = MODELS[modelType];
-
-  if (!cfg.key) {
-    throw new Error(`API key missing for model: ${modelType}. Check your .env file.`);
-  }
-
-  const res = await fetch(NVIDIA_BASE, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${cfg.key}`,
-    },
-    body: JSON.stringify({
-      model: cfg.model,
-      messages,
-      temperature: cfg.temperature,
-      max_tokens: cfg.maxTokens,
-    }),
-  });
-
-  if (!res.ok) {
-    const err = await res.text();
-    throw new Error(`[${modelType}] API error ${res.status}: ${err}`);
-  }
-
-  const data = await res.json();
-  const content = data.choices?.[0]?.message?.content?.trim() ?? '';
-  if (!content) throw new Error(`[${modelType}] Empty response`);
-  return content;
+async function ai(type: M, msgs: {role:string,content:string}[], temp?: number, tokens?: number): Promise<string> {
+  const t = temp ?? (type==='analysis'?0.3:0.7)
+  const tk = tokens ?? (type==='fast'?512:1024)
+  try { return await call(MODELS[type], KEYS[type], msgs, t, tk) }
+  catch { return await call(MODELS.fallback, KEYS.fallback, msgs, 0.7, 512) }
 }
 
-// Tries primary model → falls back to llama-3.1-8b if it fails
-async function callAI(
-  modelType: ModelType,
-  messages: { role: string; content: string }[],
-): Promise<string> {
-  try {
-    return await callModel(modelType, messages);
-  } catch (primaryErr) {
-    console.error(`Primary model (${modelType}) failed:`, primaryErr);
-    try {
-      return await callModel('fallback', messages);
-    } catch (fallbackErr) {
-      console.error('Fallback also failed:', fallbackErr);
-      throw new Error('AI service unavailable. Please try again in a moment.');
-    }
-  }
+export async function generateSummary(p: {fullName:string,targetRole:string,industry:string,yearsOfExperience:string,professionalTitle:string}) {
+  return ai('quality', [
+    { role:'system', content:'You are an expert Indian resume writer. Write 3-4 line professional summaries that sound completely human. Never use: passionate, hardworking, team player, go-getter. Be specific. Return ONLY the summary text.' },
+    { role:'user', content:`Write summary for: Name: ${p.fullName}, Role: ${p.targetRole}, Industry: ${p.industry}, Experience: ${p.yearsOfExperience} years. Indian job market context.` }
+  ], 0.7, 300)
 }
 
-// ============================================================
-// PUBLIC API — Use these functions in your components
-// ============================================================
-
-/** Generate professional summary — uses Llama 3.3 70B */
-export async function generateSummary(personalInfo: {
-  fullName: string;
-  targetRole: string;
-  industry: string;
-  yearsOfExperience: string;
-  professionalTitle: string;
-}): Promise<string> {
-  return callAI('quality', [
-    {
-      role: 'system',
-      content:
-        'You are an expert Indian resume writer with 15 years of experience. ' +
-        'Write professional summaries that sound completely human and specific. ' +
-        'Never use: passionate, hardworking, team player, go-getter, dynamic, results-driven. ' +
-        'Return ONLY the summary text — no quotes, no labels, no explanation.',
-    },
-    {
-      role: 'user',
-      content:
-        `Write a 3-4 line professional summary for:\n` +
-        `Name: ${personalInfo.fullName || 'Professional'}\n` +
-        `Role: ${personalInfo.targetRole || 'Professional'}\n` +
-        `Industry: ${personalInfo.industry || 'Technology'}\n` +
-        `Experience: ${personalInfo.yearsOfExperience || '0'} years\n` +
-        `Title: ${personalInfo.professionalTitle || 'Professional'}\n\n` +
-        `Indian job market context. Sound confident. No first-person "I".`,
-    },
-  ]);
+export async function enhanceBullet(bullet: string, role: string) {
+  return ai('quality', [
+    { role:'system', content:'Transform rough bullets into achievement statements. Start with action verb. Add metrics. Under 120 chars. Sound human. Return ONLY the enhanced bullet.' },
+    { role:'user', content:`Enhance for ${role}: "${bullet}"` }
+  ], 0.6, 150)
 }
 
-/** Enhance a bullet point — uses Llama 3.3 70B */
-export async function enhanceBullet(
-  bullet: string,
-  jobTitle: string,
-  company: string,
-): Promise<string> {
-  return callAI('quality', [
-    {
-      role: 'system',
-      content:
-        'You are an expert resume writer. Transform rough bullet points into powerful achievement statements. ' +
-        'Rules: Start with strong action verb. Add metrics where possible. ' +
-        'Keep under 120 characters. Sound human, not AI. ' +
-        'Return ONLY the enhanced bullet — nothing else.',
-    },
-    {
-      role: 'user',
-      content: `Enhance this bullet for ${jobTitle} at ${company}:\n"${bullet}"`,
-    },
-  ]);
+export async function suggestSkills(role: string, industry: string, existing: string[]): Promise<string[]> {
+  const r = await ai('fast', [
+    { role:'system', content:'Suggest skills. Return ONLY valid JSON array: ["skill1","skill2"]. No markdown.' },
+    { role:'user', content:`12 skills for ${role} in ${industry}. Skip: ${existing.join(', ')}. Indian market.` }
+  ], 0.5, 300)
+  try { const m = r.match(/\[[\s\S]*\]/); return m ? JSON.parse(m[0]) : [] } catch { return [] }
 }
 
-/** Suggest relevant skills — uses Mistral 7B (fast) */
-export async function suggestSkills(
-  targetRole: string,
-  industry: string,
-  existingSkills: string[],
-): Promise<string[]> {
-  const result = await callAI('fast', [
-    {
-      role: 'system',
-      content:
-        'You are a technical recruiter. Suggest relevant skills. ' +
-        'Return ONLY a valid JSON array of strings — no explanation, no markdown. ' +
-        'Example: ["React", "Node.js", "AWS"]',
-    },
-    {
-      role: 'user',
-      content:
-        `Suggest 12 skills for:\nRole: ${targetRole || 'Software Developer'}\n` +
-        `Industry: ${industry || 'Technology'}\n` +
-        `Already has: ${existingSkills.join(', ') || 'None'}\n` +
-        `Indian job market focus. JSON array only.`,
-    },
-  ]);
-
-  try {
-    const match = result.match(/\[[\s\S]*\]/);
-    if (match) return JSON.parse(match[0]);
-  } catch {
-    // ignore parse error
-  }
-  return result
-    .split(',')
-    .map(s => s.replace(/["[\]]/g, '').trim())
-    .filter(Boolean);
-}
-
-/** Analyze JD vs Resume match — uses DeepSeek V3.2 (deep analysis) */
-export async function analyzeJobMatch(
-  resumeText: string,
-  jobDescription: string,
-): Promise<{
-  score: number;
-  matchedSkills: string[];
-  missingSkills: string[];
-  suggestions: string[];
-}> {
-  const result = await callAI('analysis', [
-    {
-      role: 'system',
-      content:
-        'You are an expert ATS analyst. Analyze resume-to-JD match deeply. ' +
-        'Return ONLY valid raw JSON — no markdown, no explanation outside JSON.',
-    },
-    {
-      role: 'user',
-      content:
-        `Analyze this resume against the job description.\n\n` +
-        `RESUME:\n${resumeText.substring(0, 2000)}\n\n` +
-        `JOB DESCRIPTION:\n${jobDescription.substring(0, 2000)}\n\n` +
-        `Return this exact JSON:\n` +
-        `{\n  "score": 72,\n  "matchedSkills": ["React", "Node.js"],\n` +
-        `  "missingSkills": ["Docker", "AWS"],\n` +
-        `  "suggestions": ["Add Docker to your work bullets", "Mention AWS in skills"]\n}`,
-    },
-  ]);
-
-  try {
-    const match = result.match(/\{[\s\S]*\}/);
-    if (match) return JSON.parse(cleanJSON(match[0]));
-  } catch {
-    // ignore parse error
-  }
-
-  return {
-    score: 50,
-    matchedSkills: [],
-    missingSkills: [],
-    suggestions: ['Could not analyze. Please try again.'],
-  };
+export async function analyzeJobMatch(resumeText: string, jd: string): Promise<{score:number,matchedSkills:string[],missingSkills:string[],suggestions:string[]}> {
+  const r = await ai('analysis', [
+    { role:'system', content:'Analyze resume vs JD. Return ONLY valid JSON, no markdown.' },
+    { role:'user', content:`RESUME:\n${resumeText.slice(0,2000)}\n\nJD:\n${jd.slice(0,2000)}\n\nReturn: {"score":72,"matchedSkills":["React"],"missingSkills":["Docker"],"suggestions":["Add Docker"]}` }
+  ], 0.3, 800)
+  try { const m = r.match(/\{[\s\S]*\}/); return m ? JSON.parse(clean(m[0])) : {score:50,matchedSkills:[],missingSkills:[],suggestions:[]} }
+  catch { return {score:50,matchedSkills:[],missingSkills:[],suggestions:['Analysis failed. Try again.']} }
 }

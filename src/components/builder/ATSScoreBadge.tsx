@@ -1,29 +1,24 @@
-import { useResume } from '@/context/ResumeContext';
-
-const ATSScoreBadge = () => {
-  const { atsScore } = useResume();
-  const color = atsScore >= 80 ? 'text-success' : atsScore >= 50 ? 'text-warning' : 'text-destructive';
-  const stroke = atsScore >= 80 ? '#00c896' : atsScore >= 50 ? '#ffb547' : '#ff5757';
-  const circumference = 2 * Math.PI * 18;
-  const offset = circumference - (atsScore / 100) * circumference;
-
+import { useResume } from '../../context/ResumeContext'
+export default function ATSScoreBadge() {
+  const { atsScore } = useResume()
+  const color = atsScore >= 71 ? '#00c896' : atsScore >= 41 ? '#ffb547' : '#ff5757'
+  const label = atsScore >= 71 ? 'Great!' : atsScore >= 41 ? 'Improve' : 'Needs work'
+  const c = 2 * Math.PI * 16
   return (
-    <div className="flex items-center gap-2">
-      <svg width="44" height="44" viewBox="0 0 44 44">
-        <circle cx="22" cy="22" r="18" fill="none" stroke="currentColor" strokeWidth="3" className="text-border" />
-        <circle
-          cx="22" cy="22" r="18" fill="none" stroke={stroke} strokeWidth="3"
-          strokeDasharray={circumference} strokeDashoffset={offset}
-          strokeLinecap="round" transform="rotate(-90 22 22)"
-          className="transition-all duration-700"
-        />
-        <text x="22" y="24" textAnchor="middle" fill={stroke} fontSize="12" fontWeight="bold">
-          {atsScore}
-        </text>
-      </svg>
-      <span className="hidden text-xs text-text-muted lg:block">ATS</span>
+    <div className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-1.5">
+      <div className="relative flex h-9 w-9 items-center justify-center">
+        <svg width="36" height="36" viewBox="0 0 36 36" className="absolute">
+          <circle cx="18" cy="18" r="16" fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth="3"/>
+          <circle cx="18" cy="18" r="16" fill="none" stroke={color} strokeWidth="3" strokeLinecap="round"
+            strokeDasharray={c} strokeDashoffset={c*(1-atsScore/100)} transform="rotate(-90 18 18)"
+            style={{transition:'stroke-dashoffset 0.5s ease'}}/>
+        </svg>
+        <span className="text-[9px] font-bold" style={{color}}>{atsScore}</span>
+      </div>
+      <div>
+        <div className="text-xs font-semibold text-white">ATS Score</div>
+        <div className="text-[10px]" style={{color}}>{label}</div>
+      </div>
     </div>
-  );
-};
-
-export default ATSScoreBadge;
+  )
+}
